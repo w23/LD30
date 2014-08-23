@@ -57,6 +57,7 @@ int main(int argc, char *argv[]) {
         case SDL_KEYUP:
           switch(evt.key.keysym.sym) {
             case SDLK_ESCAPE:
+              if (!keydown) break;
               if (grabbed) {
                 SDL_SetRelativeMouseMode(SDL_FALSE);
                 SDL_SetWindowGrab(window, SDL_FALSE);
