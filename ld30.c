@@ -11,18 +11,20 @@ static const char shader_vertex[] =
 "uniform mat4 um4_mvp;\n"
 "attribute vec3 av3_vertex;\n"
 "attribute vec3 av3_color;\n"
-"varying vec2 vv2_tc;\n"
+"varying vec2 vv2_tc, vv2_tc2;\n"
 "void main() {\n"
 "  gl_Position = um4_mvp * vec4(av3_vertex, 1.);\n"
 "  vv2_tc = av3_color.xy * 1.6 - vec2(.8);\n"
+"  vv2_tc2 = av3_color.zx;\n"
 "}\n"
 ;
 
 static const char shader_fragment[] =
 "uniform sampler2D us2_tex;\n"
-"varying vec2 vv2_tc;\n"
+"uniform sampler2D us2_noise;\n"
+"varying vec2 vv2_tc, vv2_tc2;\n"
 "void main() {\n"
-"  gl_FragColor = texture2D(us2_tex,vv2_tc);\n"
+"  gl_FragColor = .5*(texture2D(us2_tex,vv2_tc)+texture2D(us2_noise,vv2_tc2));\n"
 "}\n"
 ;
 
@@ -50,6 +52,21 @@ static KPu16 indices[36] = {
   1, 7, 5, 1, 5, 3,
   0, 2, 4, 0, 4, 6
 };
+
+enum {
+  // Knuth MMIX constants
+  // taken from http://en.wikipedia.org/wiki/Linear_congruential_generator
+  rand_lcg32_increment = 1442695040888963407ull,
+  rand_lcg32_multiplier = 6364136223846793005ull
+};
+
+static KPu64 prngstate = 31337;
+static KPu32 rand() {
+  prngstate = prngstate * rand_lcg32_multiplier + rand_lcg32_increment;
+  return (KPu32)(prngstate >> 16);
+}
+
+KPrender_sampler_o rndtex;
 
 KPrender_program_env_o env;
 KPrender_cmd_fill_t fill;
@@ -116,6 +133,7 @@ void game_init(int argc, const char *argv[]) {
 
   kpRenderProgramArgumentTag(program, "um4_mvp", kpRenderTag("MMVP"));
   kpRenderProgramArgumentTag(program, "us2_tex", kpRenderTag("STEX"));
+  kpRenderProgramArgumentTag(program, "us2_noise", kpRenderTag("NOIZ"));
 
   env = kpRenderProgramEnvCreate();
 
@@ -143,14 +161,23 @@ void game_init(int argc, const char *argv[]) {
   kpRenderSamplerUpload(sampler, surface);
   kpRelease(surface);
 
+  surface = kpSurfaceCreate(1024, 1024, KPSurfaceFormatU8RGBA);
+  int i;
+  pix = (KPu32*)surface->buffer;
+  for (i = 0; i < surface->width * surface->height; ++i, ++pix)
+    *pix = rand();
+  rndtex = kpRenderSamplerCreate();
+  kpRenderSamplerUpload(rndtex, surface);
+  kpRelease(surface);
+
   kpRenderProgramEnvSetSampler(env, kpRenderTag("STEX"), sampler);
   kpRelease(sampler);
+  kpRenderProgramEnvSetSampler(env, kpRenderTag("NOIZ"), rndtex);
 
   kpReframeMakeIdentity(&player.frame);
 }
 
 void game_resize(int width, int height) {
-  KP_L("resize %dx%d", width, height);
   KPrender_destination_t dest;
   kpRenderDestinationDefaults(&dest);
   dest.viewport.tr.x = width;
@@ -181,7 +208,7 @@ void game_update(KPtime_ms pts) {
       kpVec3fNormalize(kpVec3f(x, y, z)), pts / 1000.f, kpVec3fMulf(offset, 3.f));
     KPmat4f m = kpMat4fMulm4(player.proj, kpMat4fdq(kpDquatfMuldq(player.frame.dq,q)));
 
-    kpRenderProgramEnvSetMat4f(&env, kpRenderTag("MMVP"), &m);
+    kpRenderProgramEnvSetMat4f(env, kpRenderTag("MMVP"), &m);
     kpRenderExecuteCommand(&raster.header);
   }
 }
