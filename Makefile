@@ -1,7 +1,7 @@
 KAPUSHA_SIMPLE := 1
 PRODUCT := ld30
-SOURCES += $(PRODUCT).c
-CFLAGS += -I./3p/glfw/include
-LDFLAGS += -L./3p/glfw/build/src -lglfw3 -lX11 -lXrandr -lXi -lXxf86vm -lXcursor
+SOURCES += $(PRODUCT).c main.c
+CFLAGS += -I./3p/SDL-linux64/include -D_REENTRANT
+LDFLAGS += -L./3p/SDL-linux64/lib -lSDL2 -lpthread
 all: $(PRODUCT)
 include 3p/kapusha/kapusha.mk
