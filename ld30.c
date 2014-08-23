@@ -2,6 +2,7 @@
 
 #include "kapusha/simpleton.h"
 #include "kapusha/render.h"
+#include "kapusha/ooo.h"
 
 static KPrender_batch_o batch;
 static KPrender_program_o program;
@@ -53,7 +54,13 @@ static KPu16 indices[36] = {
 KPrender_program_env_o env;
 KPrender_cmd_fill_t fill;
 KPrender_cmd_rasterize_t raster;
-KPmat4f proj;
+
+struct {
+  KPreframe_t frame;
+  KPmat4f proj;
+  KPvec3f move;
+} player;
+
 
 void game_init(int argc, const char *argv[]) {
   KP_L("init");
@@ -138,6 +145,8 @@ void game_init(int argc, const char *argv[]) {
 
   kpRenderProgramEnvSetSampler(env, kpRenderTag("STEX"), sampler);
   kpRelease(sampler);
+
+  kpReframeMakeIdentity(&player.frame);
 }
 
 void game_resize(int width, int height) {
@@ -148,16 +157,48 @@ void game_resize(int width, int height) {
   dest.viewport.tr.y = height;
   kpRenderSetDestination(&dest);
 
-  proj = kpMat4fProjPerspective(1.f, 100.f, (KPf32)width/(KPf32)height, 90.f);
+  player.proj = kpMat4fProjPerspective(1.f, 100.f, (KPf32)width/(KPf32)height, 90.f);
 }
 
 void game_update(KPtime_ms pts) {
-  KPdquatf q = kpDquatfRotationTranslation(
-    kpVec3fNormalize(kpVec3f(0, 1, 1)), pts / 1000.f, kpVec3f(0, 0, -5.f-3.f*kpSinf(pts/1000.f)));
-  KPmat4f m = kpMat4fMulm4(proj, kpMat4fdq(q));
-
-  kpRenderProgramEnvSetMat4f(&env, kpRenderTag("MMVP"), &m);
-
   kpRenderExecuteCommand(&fill.header);
-  kpRenderExecuteCommand(&raster.header);
+
+  static KPtime_ms lastpts;
+  KPf32 dt;
+  if (lastpts == 0) {
+    dt = 0;
+  } else {
+    dt = (pts - lastpts) / 1000.f;
+  }
+  lastpts = pts;
+
+  kpReframeTranslate(&player.frame, kpVec3fMulf(player.move, dt));
+
+  int x,y,z;
+  for (z = 0; z < 16; ++z) for(y = 0; y < 16; ++y) for(x = 0; x < 16; ++x) {
+    KPvec3f offset = kpVec3f(x-8.f,y-8.f,z-8.f);
+    KPdquatf q = kpDquatfRotationTranslation(
+      kpVec3fNormalize(kpVec3f(x, y, z)), pts / 1000.f, kpVec3fMulf(offset, 3.f));
+    KPmat4f m = kpMat4fMulm4(player.proj, kpMat4fdq(kpDquatfMuldq(player.frame.dq,q)));
+
+    kpRenderProgramEnvSetMat4f(&env, kpRenderTag("MMVP"), &m);
+    kpRenderExecuteCommand(&raster.header);
+  }
+}
+
+void game_mouse(int dx, int dy) {
+  kpReframeRotateAroundSelfY(&player.frame, (KPf32)dx * .003f);
+  kpReframeRotateAroundSelfX(&player.frame, (KPf32)dy * .003f);
+  kpReframeSyncMatrix(&player.frame);
+}
+
+void game_key(int code, int down) {
+  float d = down ? 1 : -1;
+  d *= 4.f;
+  switch (code) {
+    case 1: player.move.z += d; break;
+    case 2: player.move.z += -d; break;
+    case 3: player.move.x += d; break;
+    case 4: player.move.x += -d; break;
+  }
 }
