@@ -95,7 +95,7 @@ void game_init(int argc, const char *argv[]) {
   raster.env = &env;
 
   painter = live_program_new("painter.vs", "painter.fs",
-    "VRTX=v;", "NOIZ=us2_noise;MVIE=um4_view;SRES=uv2_res;");
+    "VRTX=v;", "TIME=t;NOIZ=us2_noise;MVIE=um4_view;SRES=uv2_res;");
 }
 
 void game_resize(int width, int height) {
@@ -113,7 +113,7 @@ void game_update(KPtime_ms pts) {
   kpRenderExecuteCommand(&fill.header);
 
   static KPtime_ms lastpts;
-  KPf32 dt;
+  KPf32 t = pts / 1000.f, dt;
   if (lastpts == 0) {
     dt = 0;
   } else {
@@ -125,6 +125,7 @@ void game_update(KPtime_ms pts) {
   kpReframeSyncMatrix(&player.frame);
 
   kpRenderProgramEnvSetMat4f(env, kpRenderTag("MVIE"), &player.frame.mat);
+  kpRenderProgramEnvSetScalarf(env, kpRenderTag("TIME"), t);
 
   raster.program = live_program_current(painter);
   kpRenderExecuteCommand(&raster.header);
